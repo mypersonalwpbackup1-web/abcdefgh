@@ -60,7 +60,7 @@
                     <input type="number" id="amount-received" placeholder="Customer se wasool ki hui raqam">
                 </div>
             </section>
-            <button type="submit" id="generate-btn"><i class="fas fa-download"></i> Save & Download Invoice</button>
+            <button type="submit" id="generate-btn"><i class="fas fa-image"></i> Send & Save Invoice</button>
         </form>
         <div id="invoice-preview"></div>
     </div>
@@ -79,16 +79,23 @@
     const db = firebase.firestore();
 
     auth.onAuthStateChanged(user => {
-        if (!user) {
+        if (user) {
+            // Agar user login hai, tab hi app ka poora code chalao
+            initializeApp();
+        } else {
+            // Agar login nahi, to wapis bhej do
             window.location.replace('login.html');
         }
     });
 
-    document.addEventListener('DOMContentLoaded', () => {
+    function initializeApp() {
         const invoiceForm = document.getElementById('invoice-form');
         const customerSelect = document.getElementById('customer-select');
         const addItemBtn = document.getElementById('add-item-btn');
+        const itemsListDiv = document.getElementById('items-list');
+        const subTotalSpan = document.getElementById('sub-total');
         const generateBtn = document.getElementById('generate-btn');
+
         let items = [];
         let subTotal = 0;
         let currentCustomerDebt = 0;
@@ -114,13 +121,12 @@
                 items.push({ name, price });
                 subTotal += price;
                 renderItems();
-                document.getElementById('sub-total').textContent = subTotal;
+                subTotalSpan.textContent = subTotal;
                 itemNameInput.value = ''; itemPriceInput.value = ''; itemNameInput.focus();
             } else { alert("Sahi item ka naam aur price daalein."); }
         }
 
         function renderItems() {
-            const itemsListDiv = document.getElementById('items-list');
             itemsListDiv.innerHTML = '';
             items.forEach(item => {
                 itemsListDiv.innerHTML += `<div class="invoice-item"><span>${item.name}</span><span>${item.price}</span></div>`;
@@ -130,8 +136,8 @@
         function resetForm() {
             items = []; subTotal = 0; currentCustomerDebt = 0;
             invoiceForm.reset();
-            renderItems();
-            document.getElementById('sub-total').textContent = '0';
+            itemsListDiv.innerHTML = '';
+            subTotalSpan.textContent = '0';
         }
 
         async function generateAndSave(e) {
@@ -156,35 +162,38 @@
                 document.getElementById('invoice-preview').innerHTML = invoiceHTML;
                 
                 const canvas = await html2canvas(document.getElementById('invoice-preview'), { scale: 2 });
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
                 
-                // === IMAGE DOWNLOAD LOGIC ===
-                const link = document.createElement('a');
-                link.download = `invoice-${customerName.replace(/ /g, '_')}-${date.getTime()}.png`;
-                link.href = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
-                link.click();
-                
-                alert("Invoice image download ho gayi hai. Aap usay gallery se share kar sakte hain.");
+                if (navigator.share && navigator.canShare({ files: [new File([blob], 'invoice.png', { type: 'image/png' })] })) {
+                    const file = new File([blob], "invoice.png", { type: "image/png" });
+                    await navigator.share({ files: [file], title: `Invoice for ${customerName}` });
+                } else {
+                    alert("Image share nahi ho saki. Is feature ke liye app ko Netlify link (HTTPS) se istemal karein. Invoice save ho gaya hai.");
+                }
                 
                 await loadCustomers();
                 resetForm();
 
             } catch (error) {
-                console.error("Error saving/downloading invoice:", error);
+                console.error("Error saving/sharing invoice:", error);
                 alert("Invoice save nahi ho saka. Internet check karein.");
             } finally {
                 generateBtn.disabled = false;
-                generateBtn.innerHTML = '<i class="fas fa-download"></i> Save & Download Invoice';
+                generateBtn.innerHTML = '<i class="fas fa-image"></i> Send & Save Invoice';
             }
         }
         
+        // --- EVENT LISTENERS ---
+        // Load customers jab app initialize ho
         loadCustomers();
+        
         customerSelect.addEventListener('change', () => {
-            const selected = customerSelect.options[customerSelect.selectedIndex].text;
-            currentCustomerDebt = parseFloat(customerSelect.options[customerSelect.selectedIndex].getAttribute('data-udhaar')) || 0;
+            const selected = customerSelect.options[customerSelect.selectedIndex];
+            currentCustomerDebt = parseFloat(selected.getAttribute('data-udhaar')) || 0;
         });
         addItemBtn.addEventListener('click', handleAddItem);
         invoiceForm.addEventListener('submit', generateAndSave);
-    });
+    }
 </script>
 </body>
 </html>
