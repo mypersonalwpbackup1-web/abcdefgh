@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hussain Kiryana - Login</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        :root { --primary-color: #128C7E; --light-gray: #f0f2f5; }
+        body { font-family: -apple-system, sans-serif; background-color: var(--light-gray); margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; box-sizing: border-box; }
+        .login-card { background-color: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        .login-card i { font-size: 3rem; color: var(--primary-color); }
+        .login-card h1 { margin: 15px 0; font-size: 1.75rem; color: var(--primary-color); }
+        .form-group { margin-bottom: 20px; text-align: left; }
+        input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; border: none; border-radius: 8px; background-color: var(--primary-color); color: #fff; font-size: 1.1rem; font-weight: bold; cursor: pointer; }
+        button:disabled { background-color: #aaa; }
+        .error-message { color: #e74c3c; margin-top: 15px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <i class="fas fa-store"></i>
+        <h1>Hussain Kiryana</h1>
+        <form id="login-form">
+            <div class="form-group">
+                <input type="email" id="login-email" placeholder="Email" required>
+            </div>
+            <div class="form-group">
+                <input type="password" id="login-password" placeholder="Password" required>
+            </div>
+            <button type="submit" id="login-btn">Login</button>
+        </form>
+        <p id="error-message" class="error-message"></p>
+    </div>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+<script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBFbFrsnRiS9oSN1BKYerFRUmWpPPHhmOY", authDomain: "sms92-app.firebaseapp.com",
+      projectId: "sms92-app", storageBucket: "sms92-app.appspot.com",
+      messagingSenderId: "572539460293", appId: "1:572539460293:web:0258625e888c8c4772eeac"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const loginForm = document.getElementById('login-form');
+    const loginBtn = document.getElementById('login-btn');
+    const errorMessage = document.getElementById('error-message');
+
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            window.location.replace('index.html');
+        }
+    });
+
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Logging in...';
+        errorMessage.style.display = 'none';
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-password').value;
+        try {
+            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+            await auth.signInWithEmailAndPassword(email, password);
+        } catch (error) {
+            errorMessage.textContent = 'Email ya Password ghalat hai.';
+            errorMessage.style.display = 'block';
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'Login';
+        }
+    });
+</script>
+</body>
+</html>
