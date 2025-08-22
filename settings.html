@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Settings</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        :root { --primary-color: #128C7E; --light-gray: #f0f2f5; --dark-text: #333; --success-color: #27ae60; --danger-color: #e74c3c; }
+        body { font-family: -apple-system, sans-serif; background-color: var(--light-gray); margin: 0; padding: 15px; }
+        .container { width: 100%; max-width: 700px; margin: auto; }
+        .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; background-color: #fff; padding: 15px; border-radius: 12px; }
+        .header .back-link { font-size: 1.5rem; color: var(--dark-text); text-decoration: none; }
+        .header h1 { color: var(--primary-color); font-size: 1.75rem; margin: 0; }
+        .card { background-color: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        input { width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; margin-bottom: 15px; box-sizing: border-box; }
+        button { color: #fff; background: var(--primary-color); padding: 15px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; width: 100%; }
+        button:disabled { background-color: #aaa; }
+        .message { padding: 10px; border-radius: 8px; margin-top: 15px; text-align: center; display: none; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i></a>
+            <h1>App Settings</h1>
+        </header>
+
+        <section class="card">
+            <h2>Password Tabdeel Karein</h2>
+            <form id="change-password-form">
+                <input type="password" id="current-password" placeholder="Purana Password" required>
+                <input type="password" id="new-password" placeholder="Naya Password" required>
+                <input type="password" id="confirm-password" placeholder="Naye Password ki Tasdeeq Karein" required>
+                <button type="submit" id="update-password-btn">Update Password</button>
+            </form>
+            <div id="message-div" class="message"></div>
+        </section>
+    </div>
+
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+<script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBFbFrsnRiS9oSN1BKYerFRUmWpPPHhmOY", authDomain: "sms92-app.firebaseapp.com",
+      projectId: "sms92-app", storageBucket: "sms92-app.appspot.com",
+      messagingSenderId: "572539460293", appId: "1:572539460293:web:0258625e888c8c4772eeac"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+
+    auth.onAuthStateChanged(user => {
+        if (!user) {
+            window.location.replace('login.html');
+        }
+    });
+
+    const changePasswordForm = document.getElementById('change-password-form');
+    const updateBtn = document.getElementById('update-password-btn');
+    const messageDiv = document.getElementById('message-div');
+
+    changePasswordForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        updateBtn.disabled = true;
+        updateBtn.textContent = 'Updating...';
+        messageDiv.style.display = 'none';
+
+        const currentPassword = document.getElementById('current-password').value;
+        const newPassword = document.getElementById('new-password').value;
+        const confirmPassword = document.getElementById('confirm-password').value;
+
+        if (newPassword !== confirmPassword) {
+            showMessage('Naya password aapas mein match nahi ho raha.', 'error');
+            resetButton();
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            showMessage('Password kam se kam 6 huroof ka hona chahiye.', 'error');
+            resetButton();
+            return;
+        }
+
+        const user = auth.currentUser;
+        const credential = firebase.auth.EmailAuthProvider.credential(user.email, currentPassword);
+
+        try {
+            // Step 1: Purane password se user ki tasdeeq karein
+            await user.reauthenticateWithCredential(credential);
+
+            // Step 2: Tasdeeq ke baad naya password update karein
+            await user.updatePassword(newPassword);
+            
+            showMessage('Password kamyabi se update ho gaya hai!', 'success');
+            changePasswordForm.reset();
+
+        } catch (error) {
+            if (error.code === 'auth/wrong-password') {
+                showMessage('Aapka purana password ghalat hai.', 'error');
+            } else {
+                showMessage('Koi masla pesh aa gaya hai. Dobara koshish karein.', 'error');
+                console.error(error);
+            }
+        } finally {
+            resetButton();
+        }
+    });
+
+    function showMessage(msg, type) {
+        messageDiv.textContent = msg;
+        messageDiv.className = `message ${type}`;
+        messageDiv.style.display = 'block';
+    }
+
+    function resetButton() {
+        updateBtn.disabled = false;
+        updateBtn.textContent = 'Update Password';
+    }
+</script>
+</body>
+</html>
