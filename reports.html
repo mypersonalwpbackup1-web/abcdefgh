@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Reports</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        :root { --primary-color: #128C7E; --light-gray: #f0f2f5; --dark-text: #333; --plus-color: #27ae60; --minus-color: #e74c3c; }
+        body { font-family: -apple-system, sans-serif; background-color: var(--light-gray); margin: 0; padding: 15px; }
+        .container { width: 100%; max-width: 800px; margin: auto; }
+        .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; background-color: #fff; padding: 15px; border-radius: 12px; }
+        .header .back-link { font-size: 1.5rem; color: var(--dark-text); text-decoration: none; }
+        .header h1 { color: var(--primary-color); font-size: 1.75rem; margin: 0; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { flex: 1; padding: 12px; font-size: 1rem; font-weight: bold; border: none; border-radius: 8px; background-color: #fff; cursor: pointer; }
+        .tab-btn.active { background-color: var(--primary-color); color: #fff; }
+        .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .report-card { background-color: #fff; padding: 20px; border-radius: 12px; text-align: center; }
+        .report-card i { font-size: 2rem; color: var(--primary-color); margin-bottom: 10px; }
+        .report-card .value { font-size: 1.75rem; font-weight: bold; color: var(--dark-text); }
+        .report-card .label { font-size: 0.9rem; color: #555; }
+        .report-card .positive { color: var(--plus-color); }
+        .report-card .negative { color: var(--minus-color); }
+        .loading-spinner { text-align: center; font-size: 2rem; color: var(--primary-color); padding: 40px; grid-column: 1 / -1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i></a>
+            <h1>Business Reports</h1>
+        </header>
+        <div class="tabs">
+            <button class="tab-btn active" data-period="daily">Daily</button>
+            <button class="tab-btn" data-period="weekly">Weekly</button>
+            <button class="tab-btn" data-period="monthly">Monthly</button>
+        </div>
+        <div id="report-display" class="report-grid">
+            <div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div>
+        </div>
+    </div>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+<script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBFbFrsnRiS9oSN1BKYerFRUmWpPPHhmOY", authDomain: "sms92-app.firebaseapp.com",
+      projectId: "sms92-app", storageBucket: "sms92-app.appspot.com",
+      messagingSenderId: "572539460293", appId: "1:572539460293:web:0258625e888c8c4772eeac"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    auth.onAuthStateChanged(user => {
+        if (!user) { window.location.replace('login.html'); }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const tabsContainer = document.querySelector('.tabs');
+        const reportDisplay = document.getElementById('report-display');
+
+        function getDateRange(period) {
+            const now = new Date();
+            let start = new Date(now); let end = new Date(now);
+            if (period === 'daily') { start.setHours(0,0,0,0); end.setHours(23,59,59,999); }
+            else if (period === 'weekly') {
+                const day = start.getDay() === 0 ? 6 : start.getDay() - 1;
+                start.setDate(start.getDate() - day); start.setHours(0,0,0,0);
+                end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23,59,59,999);
+            } else if (period === 'monthly') {
+                start = new Date(now.getFullYear(), now.getMonth(), 1);
+                end = new Date(now.getFullYear(), now.getMonth() + 1, 0); end.setHours(23,59,59,999);
+            }
+            return { start, end };
+        }
+
+        async function fetchAndProcessReports(period) {
+            reportDisplay.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div>';
+            const { start, end } = getDateRange(period);
+            let totalSales = 0, totalReceived = 0, invoiceCount = 0;
+            try {
+                const customersSnapshot = await db.collection('customers').get();
+                const promises = [];
+                customersSnapshot.forEach(customerDoc => {
+                    promises.push(db.collection('customers').doc(customerDoc.id).collection('invoices').where('date', '>=', start).where('date', '<=', end).get());
+                });
+                const invoiceSnapshots = await Promise.all(promises);
+                invoiceSnapshots.forEach(snapshot => {
+                    snapshot.forEach(doc => {
+                        const inv = doc.data();
+                        totalSales += inv.subTotal || 0;
+                        totalReceived += inv.amountReceived || 0;
+                        invoiceCount++;
+                    });
+                });
+                displayReport(totalSales, totalReceived, invoiceCount);
+            } catch(error) { reportDisplay.innerHTML = '<p>Reports load nahi ho sakein.</p>'; }
+        }
+
+        function displayReport(sales, received, count) {
+            const debtChange = sales - received;
+            const debtChangeClass = debtChange >= 0 ? 'negative' : 'positive';
+            const debtChangeSign = debtChange >= 0 ? '+' : '';
+            reportDisplay.innerHTML = `<div class="report-card"><i class="fas fa-cash-register"></i><div class="value">${sales}</div><div class="label">Kul Farokht</div></div><div class="report-card"><i class="fas fa-hand-holding-dollar"></i><div class="value">${received}</div><div class="label">Kul Wasooli</div></div><div class="report-card"><i class="fas fa-chart-pie"></i><div class="value ${debtChangeClass}">${debtChangeSign}${debtChange}</div><div class="label">Udhaar mein Tabdeeli</div></div><div class="report-card"><i class="fas fa-receipt"></i><div class="value">${count}</div><div class="label">Kul Invoices</div></div>`;
+        }
+        
+        tabsContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('tab-btn')) {
+                document.querySelector('.tab-btn.active').classList.remove('active');
+                e.target.classList.add('active');
+                fetchAndProcessReports(e.target.dataset.period);
+            }
+        });
+
+        fetchAndProcessReports('daily');
+    });
+</script>
+</body>
+</html>
