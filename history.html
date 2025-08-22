@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer History</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        :root { --primary-color: #128C7E; --light-gray: #f0f2f5; --dark-text: #333; --plus-color: #27ae60; --minus-color: #e74c3c; }
+        body { font-family: -apple-system, sans-serif; background-color: #fff; margin: 0; padding: 15px; }
+        .container { width: 100%; max-width: 700px; margin: auto; }
+        .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+        .header .back-link { font-size: 1.5rem; color: var(--dark-text); text-decoration: none; }
+        .header h1 { color: var(--primary-color); font-size: 1.75rem; margin: 0; }
+        .form-section { background-color: var(--light-gray); padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        select { width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
+        #history-list .history-card { background: var(--light-gray); padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+        .history-card .date { font-weight: bold; color: #555; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 10px; font-size: 0.875rem; }
+        .history-card .details-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.9375rem; padding: 6px 0; }
+        .details-row i { margin-right: 8px; width: 20px; text-align: center; }
+        .details-row .plus { font-weight: bold; color: var(--primary-color); }
+        .details-row .minus { font-weight: bold; color: var(--plus-color); }
+        .history-card .final-balance { font-weight: bold; font-size: 1.125rem; border-top: 2px solid #ddd; margin-top: 8px; padding-top: 8px; color: var(--primary-color); }
+        .history-card .items-list { font-size: 0.8125rem; color: #555; border-top: 1px dashed #ccc; margin-top: 10px; padding-top: 10px; }
+        .history-card .items-list ul { margin: 0; padding-left: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i></a>
+            <h1>Customer History</h1>
+        </div>
+        <section class="form-section">
+            <label for="customer-select"><strong>Customer Select Karein:</strong></label>
+            <select id="customer-select"><option value="">-- Loading... --</option></select>
+        </section>
+        <section id="history-container">
+            <div id="history-list"><p>Upar se customer select karein.</p></div>
+        </section>
+    </div>
+
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+<script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBFbFrsnRiS9oSN1BKYerFRUmWpPPHhmOY", authDomain: "sms92-app.firebaseapp.com",
+      projectId: "sms92-app", storageBucket: "sms92-app.appspot.com",
+      messagingSenderId: "572539460293", appId: "1:572539460293:web:0258625e888c8c4772eeac"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // === LOGIN PROTECTION ===
+    auth.onAuthStateChanged(user => {
+        if (!user) {
+            window.location.replace('login.html');
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const customerSelect = document.getElementById('customer-select');
+        const historyListDiv = document.getElementById('history-list');
+
+        async function loadCustomers() {
+            try {
+                const snapshot = await db.collection('customers').orderBy('name').get();
+                let optionsHTML = '<option value="">-- Customer Chunein --</option>';
+                snapshot.forEach(doc => {
+                    optionsHTML += `<option value="${doc.id}">${doc.data().name}</option>`;
+                });
+                customerSelect.innerHTML = optionsHTML;
+            } catch (error) {
+                console.error("Error loading customers:", error);
+                customerSelect.innerHTML = '<option value="">-- Error Loading --</option>';
+            }
+        }
+
+        async function loadCustomerHistory(customerId) {
+            historyListDiv.innerHTML = 'Loading hisab kitab...';
+            try {
+                const snapshot = await db.collection('customers').doc(customerId).collection('invoices').orderBy('date', 'desc').get();
+                let historyHTML = '';
+                if (snapshot.empty) {
+                    historyHTML = '<p>Is customer ka koi purana record nahi mila.</p>';
+                } else {
+                    snapshot.forEach(doc => {
+                        const inv = doc.data();
+                        const date = inv.date.toDate();
+                        const formattedDate = `${date.toLocaleDateString()} at ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                        let itemsHTML = '';
+                        if (inv.items && inv.items.length > 0) {
+                            itemsHTML = `<div class="items-list"><strong>Items:</strong><ul>${inv.items.map(item => `<li>${item.name} - ${item.price}</li>`).join('')}</ul></div>`;
+                        }
+                        historyHTML += `
+                            <div class="history-card">
+                                <div class="date">${formattedDate}</div>
+                                <div class="details-row"><span><i class="fas fa-history"></i> Pichla Baqaya</span><span>${inv.previousTotalDebt}</span></div>
+                                <div class="details-row"><span><i class="fas fa-shopping-cart"></i> Aaj ka Bill</span><span class="plus">+ ${inv.subTotal}</span></div>
+                                <div class="details-row"><span><i class="fas fa-hand-holding-dollar"></i> Wasool Shuda</span><span class="minus">- ${inv.amountReceived}</span></div>
+                                <div class="details-row final-balance"><span><i class="fas fa-wallet"></i> Naya Baqaya</span><span>${inv.newTotalDebt}</span></div>
+                                ${itemsHTML}
+                            </div>`;
+                    });
+                }
+                historyListDiv.innerHTML = historyHTML;
+            } catch (error) {
+                console.error("Error loading history:", error);
+                historyListDiv.innerHTML = '<p>History load nahi ho saki. Internet check karein.</p>';
+            }
+        }
+
+        // Load customers as soon as the page content is ready
+        loadCustomers();
+
+        customerSelect.addEventListener('change', () => {
+            const customerId = customerSelect.value;
+            if (customerId) {
+                loadCustomerHistory(customerId);
+            } else {
+                historyListDiv.innerHTML = '<p>Pehle upar se customer select karein.</p>';
+            }
+        });
+    });
+</script>
+</body>
+</html>
