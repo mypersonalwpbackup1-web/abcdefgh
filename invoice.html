@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hussain Kiryana - Naya Invoice</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root { --primary-color: #128C7E; --secondary-color: #25D366; --light-gray: #f0f2f5; --dark-text: #333; --border-color: #ddd; }
+        body { font-family: -apple-system, sans-serif; background-color: #fff; margin: 0; padding: 15px; }
+        .container { width: 100%; max-width: 700px; margin: auto; }
+        .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+        .header .back-link { font-size: 1.5rem; color: #333; text-decoration: none; }
+        .header h1 { color: var(--primary-color); font-size: 1.75rem; margin: 0; }
+        .form-section { background-color: var(--light-gray); padding: 20px; border-radius: 12px; margin-bottom: 15px; }
+        h3 { text-align: center; margin-top: 0; color: var(--dark-text); }
+        .form-group { margin-bottom: 18px; }
+        label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 600; color: var(--dark-text); }
+        input, select { width: 100%; padding: 12px 15px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
+        button { color: white; padding: 15px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; width: 100%; display: flex; justify-content: center; gap: 8px; cursor: pointer; }
+        button:disabled { background-color: #aaa; }
+        .item-entry .input-fields { display: flex; gap: 10px; }
+        .item-entry .form-group { flex-grow: 1; margin: 0; }
+        .item-entry .form-group:last-child { max-width: 100px; }
+        #add-item-btn { margin-top: 15px; background-color: var(--primary-color); }
+        #generate-btn { margin-top: 20px; background-color: var(--secondary-color); }
+        .invoice-item { display: flex; justify-content: space-between; padding: 12px; margin-top: 10px; border-radius: 6px; background-color: #fff; }
+        .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 1rem; }
+        .total-row:last-child { font-size: 1.25rem; font-weight: bold; }
+        #invoice-preview { position: absolute; left: -9999px; width: 380px; padding: 20px; background: white; font-family: 'Helvetica', sans-serif; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header"> <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i></a> <h1>Naya Invoice</h1> </div>
+        <form id="invoice-form">
+            <section class="form-section">
+                <div class="form-group">
+                    <label for="customer-select"><i class="fas fa-user"></i> Customer Select Karein:</label>
+                    <select id="customer-select" required><option value="">-- Loading... --</option></select>
+                </div>
+            </section>
+            <section class="form-section">
+                <h3>Aaj ka Samaan</h3>
+                <div class="item-entry">
+                    <div class="input-fields">
+                        <div class="form-group"><input type="text" id="item-name" placeholder="Item ka Naam"></div>
+                        <div class="form-group"><input type="number" id="item-price" placeholder="Price"></div>
+                    </div>
+                    <button type="button" id="add-item-btn">Add Item</button>
+                </div>
+                <div id="items-list"></div>
+            </section>
+            <section class="form-section">
+                <h3>Hisab Kitab</h3>
+                <div class="total-row"><span>Aaj ka Bill:</span><span>PKR <span id="sub-total">0</span></span></div>
+                <div class="form-group" style="margin:15px 0 0;">
+                     <label for="amount-received"><i class="fas fa-hand-holding-dollar"></i> Wasool Shuda Raqam:</label>
+                    <input type="number" id="amount-received" placeholder="Customer se wasool ki hui raqam">
+                </div>
+            </section>
+            <button type="submit" id="generate-btn"><i class="fas fa-download"></i> Save & Download Invoice</button>
+        </form>
+        <div id="invoice-preview"></div>
+    </div>
+
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+<script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBFbFrsnRiS9oSN1BKYerFRUmWpPPHhmOY", authDomain: "sms92-app.firebaseapp.com",
+      projectId: "sms92-app", storageBucket: "sms92-app.appspot.com",
+      messagingSenderId: "572539460293", appId: "1:572539460293:web:0258625e888c8c4772eeac"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    auth.onAuthStateChanged(user => {
+        if (!user) {
+            window.location.replace('login.html');
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const invoiceForm = document.getElementById('invoice-form');
+        const customerSelect = document.getElementById('customer-select');
+        const addItemBtn = document.getElementById('add-item-btn');
+        const generateBtn = document.getElementById('generate-btn');
+        let items = [];
+        let subTotal = 0;
+        let currentCustomerDebt = 0;
+        
+        async function loadCustomers() {
+            try {
+                const snapshot = await db.collection('customers').orderBy('name').get();
+                let optionsHTML = '<option value="">-- Customer Chunein --</option>';
+                snapshot.forEach(doc => {
+                    const customer = doc.data();
+                    optionsHTML += `<option value="${doc.id}" data-udhaar="${customer.kul_udhaar || 0}">${customer.name}</option>`;
+                });
+                customerSelect.innerHTML = optionsHTML;
+            } catch (error) { console.error("Error loading customers:", error); customerSelect.innerHTML = '<option value="">-- Error --</option>'; }
+        }
+
+        function handleAddItem() {
+            const itemNameInput = document.getElementById('item-name');
+            const itemPriceInput = document.getElementById('item-price');
+            const name = itemNameInput.value.trim();
+            const price = parseFloat(itemPriceInput.value);
+            if (name && !isNaN(price) && price > 0) {
+                items.push({ name, price });
+                subTotal += price;
+                renderItems();
+                document.getElementById('sub-total').textContent = subTotal;
+                itemNameInput.value = ''; itemPriceInput.value = ''; itemNameInput.focus();
+            } else { alert("Sahi item ka naam aur price daalein."); }
+        }
+
+        function renderItems() {
+            const itemsListDiv = document.getElementById('items-list');
+            itemsListDiv.innerHTML = '';
+            items.forEach(item => {
+                itemsListDiv.innerHTML += `<div class="invoice-item"><span>${item.name}</span><span>${item.price}</span></div>`;
+            });
+        }
+
+        function resetForm() {
+            items = []; subTotal = 0; currentCustomerDebt = 0;
+            invoiceForm.reset();
+            renderItems();
+            document.getElementById('sub-total').textContent = '0';
+        }
+
+        async function generateAndSave(e) {
+            e.preventDefault();
+            const customerId = customerSelect.value;
+            if (!customerId) { alert('Pehle customer select karein.'); return; }
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+            const amountReceived = parseFloat(document.getElementById('amount-received').value) || 0;
+            const previousTotalDebt = currentCustomerDebt;
+            const newTotalDebt = previousTotalDebt + subTotal - amountReceived;
+            const date = new Date();
+            const customerName = customerSelect.options[customerSelect.selectedIndex].text;
+            
+            try {
+                await db.collection('customers').doc(customerId).collection('invoices').add({ date, items, subTotal, amountReceived, previousTotalDebt, newTotalDebt });
+                await db.collection('customers').doc(customerId).update({ kul_udhaar: newTotalDebt });
+
+                const formattedTime = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                let invoiceHTML = `<div style="border:1px solid #eee; padding:20px; border-radius:10px; font-family:Arial, sans-serif; color:#333;"><h2 style="text-align:center; margin:0 0 15px 0; color:#128C7E; border-bottom:2px solid #128C7E; padding-bottom:10px;">Hussain Kiryana Store</h2><p style="font-size:12px; color:#555; margin:0;"><strong>Customer:</strong> ${customerName}<br><strong>Date:</strong> ${date.toLocaleDateString()} ${formattedTime}</p>${items.length > 0 ? `<table style="width:100%; border-collapse:collapse; margin-top:20px;"><thead><tr style="background-color:#f0f2f5;"><th style="padding:8px; text-align:left;">Item</th><th style="padding:8px; text-align:right;">Price</th></tr></thead><tbody>${items.map(item => `<tr><td style="padding:8px; border-bottom:1px solid #eee;">${item.name}</td><td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${item.price}</td></tr>`).join('')}</tbody></table>` : ''}<div style="margin-top:20px; padding-top:15px; border-top:1px dashed #ccc;"><p style="display:flex; justify-content:space-between; margin:5px 0; font-size:14px;"><span>Pichla Kul Baqaya:</span><span>${previousTotalDebt}</span></p><p style="display:flex; justify-content:space-between; margin:5px 0; font-size:14px;"><span>Aaj ka Bill:</span><span>+ ${subTotal}</span></p>${amountReceived > 0 ? `<p style="display:flex; justify-content:space-between; margin:5px 0; font-size:14px; color:#27ae60;"><strong>Aaj Wasool Shuda:</strong><strong>- ${amountReceived}</strong></p>` : ''}<p style="display:flex; justify-content:space-between; font-size:18px; font-weight:bold; border-top:2px solid #333; padding-top:10px; margin-top:10px;"><span>Naya Kul Baqaya:</span><span>PKR ${newTotalDebt}</span></p></div><p style="text-align:center; font-size:12px; margin-top:20px; color:#777;">Shukriya!</p></div>`;
+                document.getElementById('invoice-preview').innerHTML = invoiceHTML;
+                
+                const canvas = await html2canvas(document.getElementById('invoice-preview'), { scale: 2 });
+                
+                // === IMAGE DOWNLOAD LOGIC ===
+                const link = document.createElement('a');
+                link.download = `invoice-${customerName.replace(/ /g, '_')}-${date.getTime()}.png`;
+                link.href = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+                link.click();
+                
+                alert("Invoice image download ho gayi hai. Aap usay gallery se share kar sakte hain.");
+                
+                await loadCustomers();
+                resetForm();
+
+            } catch (error) {
+                console.error("Error saving/downloading invoice:", error);
+                alert("Invoice save nahi ho saka. Internet check karein.");
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '<i class="fas fa-download"></i> Save & Download Invoice';
+            }
+        }
+        
+        loadCustomers();
+        customerSelect.addEventListener('change', () => {
+            const selected = customerSelect.options[customerSelect.selectedIndex].text;
+            currentCustomerDebt = parseFloat(customerSelect.options[customerSelect.selectedIndex].getAttribute('data-udhaar')) || 0;
+        });
+        addItemBtn.addEventListener('click', handleAddItem);
+        invoiceForm.addEventListener('submit', generateAndSave);
+    });
+</script>
+</body>
+</html>
